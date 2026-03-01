@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"gitlab.com/timstpierre/go-embedded/pkg/lcd1602"
 	"periph.io/x/conn/v3/i2c"
 	"periph.io/x/conn/v3/i2c/i2creg"
 	"periph.io/x/devices/v3/ht16k33"
+	"sync"
 	"time"
 )
 
@@ -17,31 +19,62 @@ var (
 	i2cbus       i2c.BusCloser
 	clockDevice  *ht16k33.Dev
 	clockDisplay *NumDisplay
+	lcdDevice    *lcd1602.Dev
+	displayMgr   *DisplayManager
+	busLock      = sync.RWMutex{}
+	wasDay       bool
 )
 
 func i2cInit() {
-	log.Debugf("Setting up i2c bus %s", ConfigData.I2cBus)
+	log.Infof("Setting up i2c bus %s", ConfigData.I2cBus)
 	var err error
 	i2cbus, err = i2creg.Open(ConfigData.I2cBus)
 	if err != nil {
 		log.Fatalf("Problem opening i2c bus - %v", err)
 	}
+
+	lcdDevice, err = lcd1602.NewI2C(i2cbus, nil)
+	if err != nil {
+		log.Fatalf("Problem opening LCD display - %v", err)
+	}
+
+	busLock.Lock()
+	lcdDevice.SetBacklight(true)
+	time.Sleep(200 * time.Millisecond)
+	lcdDevice.Home()
+	time.Sleep(200 * time.Millisecond)
+	lcdDevice.CursorMode(false, false)
+	lcdDevice.WriteUTFString("Self Test")
+	time.Sleep(100 * time.Millisecond)
+	busLock.Unlock()
+
 	clockDevice, err = ht16k33.NewI2C(i2cbus, clockAddress)
 	if err != nil {
 		log.Fatalf("Problem opening clock display - %v", err)
 	}
+	busLock.Lock()
+	time.Sleep(100 * time.Millisecond)
 	clockDevice.SetBrightness(15)
 	clockDisplay = NewNumDisplay(clockDevice)
 	clockDisplay.SetColon(false)
+	time.Sleep(100 * time.Millisecond)
+	busLock.Unlock()
+
+	time.Sleep(5 * time.Second)
+	displayMgr = NewDisplayManager(lcdDevice, nil, Dimmer1)
 
 }
 
 func i2cStop() {
+	displayMgr.Stop()
 	clockDevice.Halt()
+	lcdDevice.Halt()
 	i2cbus.Close()
 }
 
 func updateLEDClock(currentTime time.Time) {
+	busLock.Lock()
+	defer busLock.Unlock()
 	hours, minutes, seconds := time.Now().Clock()
 	clockDisplay.Write2Digits(0, uint8(hours), false)
 	clockDisplay.Write2Digits(3, uint8(minutes), true)
@@ -53,8 +86,17 @@ func updateLEDClock(currentTime time.Time) {
 
 	if hours < ConfigData.DisplayDimEnd || hours >= ConfigData.DisplayDimStart {
 		clockDevice.SetBrightness(1)
+		if wasDay {
+			displayMgr.Night()
+		}
+		wasDay = false
 	} else {
 		clockDevice.SetBrightness(15)
+		if !wasDay {
+			displayMgr.Day()
+		}
+		wasDay = true
+
 	}
 
 }

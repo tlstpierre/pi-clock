@@ -6,6 +6,9 @@ import (
 	"os"
 	"os/signal"
 	"periph.io/x/host/v3"
+
+	//	"periph.io/x/host/v3/rpi"
+
 	"syscall"
 	"time"
 )
@@ -47,16 +50,19 @@ func main() {
 	setTicker()
 
 	// Set up our peripherals
-	if _, err := host.Init(); err != nil {
+	if hostState, err := host.Init(); err != nil {
 		log.Fatalf("Problem setting up periph host - %v", err)
+	} else {
+		log.Debugf("Periph host state is %+v", hostState)
 	}
-	i2cInit()
 
 	Dimmer1, err = NewDimmer(ConfigData.PWMPin)
 	if err != nil {
 		log.Fatalf("Problem setting up dimmer - %v", err)
 	}
 	defer Dimmer1.Stop()
+	i2cInit()
+
 	log.Info("Set up dimmer")
 	Dimmer1.Fade(FullBright, 2*time.Second)
 	time.Sleep(4 * time.Second)

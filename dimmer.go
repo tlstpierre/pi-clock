@@ -7,6 +7,8 @@ import (
 	"periph.io/x/conn/v3/gpio"
 	"periph.io/x/conn/v3/gpio/gpioreg"
 	"periph.io/x/conn/v3/physic"
+	//	"periph.io/x/host/v3/bcm283x"
+	//	"periph.io/x/host/v3/gpioioctl"
 	"time"
 )
 
@@ -19,6 +21,7 @@ type Dimmer struct {
 	pin       gpio.PinIO
 	intensity int32
 	target    int32
+	max       int32
 	fadetime  time.Duration
 	freq      physic.Frequency
 	newValue  chan struct{}
@@ -27,11 +30,13 @@ type Dimmer struct {
 
 func NewDimmer(pin string) (dimmer *Dimmer, err error) {
 	dimmer = &Dimmer{
-		pin:      gpioreg.ByName(pin),
+		pin: gpioreg.ByName(pin),
+		//		pin:      bcm283x.GPIO27,
 		fadetime: time.Second,
 		freq:     100 * physic.Hertz,
 		newValue: make(chan struct{}),
 		stopChan: make(chan struct{}),
+		max:      int32(gpio.DutyMax),
 	}
 	if dimmer.pin == nil {
 		err = fmt.Errorf("Could not register pin %s", pin)
@@ -68,6 +73,11 @@ func (d *Dimmer) Fade(intensity int32, rate time.Duration) error {
 func (d *Dimmer) Stop() {
 	d.stopChan <- struct{}{}
 	d.pin.Halt()
+}
+
+// Get the current output and target in percent
+func (d *Dimmer) PercentOutput() (uint8, uint8) {
+	return uint8(100 * d.intensity / d.max), uint8(100 * d.target / d.max)
 }
 
 func dimmerRoutine(dimmer *Dimmer) {

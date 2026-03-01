@@ -44,8 +44,8 @@ type Timer struct {
 func (c *Config) Initialize() {
 	*c = Config{
 		TimeZone:        "America/Toronto",
-		I2cBus:          "",
-		PWMPin:          "",
+		I2cBus:          "1",
+		PWMPin:          "12",
 		BrightLevel:     15,
 		DimLevel:        1,
 		DisplayDimStart: 21,
